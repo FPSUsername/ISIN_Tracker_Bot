@@ -1,0 +1,8 @@
+aiohttp>=3.7.4.post0
+aiohttp[speedups]>=3.7.4.post0
+aiosqlite>=0.17.0
+beautifulsoup4>=4.9.3
+emoji>=1.4.2
+orjson>=3.6.3
+telethon>=1.23.0
+uvloop>=0.16.0; sys_platform == "linux"
