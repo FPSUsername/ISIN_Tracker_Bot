@@ -366,28 +366,27 @@ async def callback_settings(event):
 #############################################
 # Main keyboard functions
 #############################################
-
-# Todo: Match everything except if it matches any other function. Could solve it with an ugly global flag
-@events.register(events.NewMessage(pattern=r'(.*?)', incoming=True))
+# Case insensitive matching with all other patterns
+@events.register(events.NewMessage(pattern=r'(^((?i)(?!Cancel|Close|Track|List|Remove|Settings|database|db|Confirm|NL).)*$)', incoming=True))
 async def welcome_back(event):
     sender = await event.get_sender()
     user = utils.get_input_user(sender)
     message = "Welcome back!"
-    mk = event.client.build_reply_markup(mk_home)
+    markup = event.client.build_reply_markup(mk_home)
 
-    await event.client.send_message(user.user_id, message, buttons=mk)
+    await event.client.send_message(user.user_id, message, buttons=markup)
 
 @events.register(events.NewMessage(pattern=r'(?i).*\b(Track)\b', incoming=True))
 async def track(event):
     sender = await event.get_sender()
     user = utils.get_input_user(sender)
     message = "📦 I'm ready. Tell me the sprinter's isin."
-    mk = event.client.build_reply_markup(mk_home)
+    markup = event.client.build_reply_markup(mk_home)
 
     async with event.client.conversation(user.user_id) as conv:
         cancelButton = Button.inline(
             emojize(":cross_mark:") + " Cancel", b'Cancel_conv')
-        msg = await conv.send_message(user.user_id, message, buttons=cancelButton)
+        msg = await conv.send_message(message, buttons=cancelButton)
 
         response = await conv.get_response(timeout=120)
 
@@ -411,7 +410,7 @@ async def track(event):
         else:
             message = "Invalid isin."
 
-        await event.client.send_message(user.user_id, message, buttons=mk)
+        await event.client.send_message(user.user_id, message, buttons=markup)
 
 
 @events.register(events.NewMessage(pattern=r'(?i).*\b(List)\b', incoming=True))
