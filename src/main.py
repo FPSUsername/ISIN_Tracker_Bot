@@ -117,6 +117,7 @@ async def main():
     # Handlers
     client.add_event_handler(start)
     client.add_event_handler(stop)
+    client.add_event_handler(welcome_back)
     client.add_event_handler(track)
     client.add_event_handler(current_list)
     client.add_event_handler(remove)
@@ -132,6 +133,7 @@ async def main():
     client.add_event_handler(database)
     client.parse_mode = 'md'
 
+    # Make a try except with ConnectionError
     await client.start(bot_token=TOKEN)
     # await client.catch_up()  # Broken
     try:
@@ -181,7 +183,6 @@ async def callback_cancel(event):
     user = utils.get_input_user(sender)
     callback_data = event.data.decode("utf-8")
     regex_data = re.findall(r"(?i)(Cancel)|_([a-z]+)", callback_data)
-    mk = mk_home
 
     message = "Action cancelled."
 
@@ -202,9 +203,7 @@ async def callback_cancel(event):
     elif cb_type == "conv":
         await event.client.conversation(user.user_id).cancel_all()
 
-
-    markup = event.client.build_reply_markup(mk)
-    await event.edit(message, buttons=markup)
+    await event.edit(message)
 
 
 @events.register(events.CallbackQuery(pattern=r'(?i).*\b(Close)\b'))
@@ -225,7 +224,6 @@ async def callback_confirm(event):
     user = utils.get_input_user(sender)
     callback_data = event.data.decode("utf-8")
     regex_data = re.findall(r"(?i)(Confirm)|_([a-z]+)", callback_data)
-    mk = mk_home
 
     message = "Action confirmed.\n"
 
@@ -245,8 +243,7 @@ async def callback_confirm(event):
     except IndexError:
         pass
 
-    markup = event.client.build_reply_markup(mk)
-    await event.edit(message, buttons=markup, link_preview=False)
+    await event.edit(message, link_preview=False)
 
 
 @events.register(events.CallbackQuery(pattern=r"(?i)([0-9]+)(_Remove)"))
@@ -370,21 +367,32 @@ async def callback_settings(event):
 # Main keyboard functions
 #############################################
 
+# Todo: Match everything except if it matches any other function. Could solve it with an ugly global flag
+@events.register(events.NewMessage(pattern=r'(.*?)', incoming=True))
+async def welcome_back(event):
+    sender = await event.get_sender()
+    user = utils.get_input_user(sender)
+    message = "Welcome back!"
+    mk = event.client.build_reply_markup(mk_home)
+
+    await event.client.send_message(user.user_id, message, buttons=mk)
+
 @events.register(events.NewMessage(pattern=r'(?i).*\b(Track)\b', incoming=True))
 async def track(event):
     sender = await event.get_sender()
     user = utils.get_input_user(sender)
     message = "📦 I'm ready. Tell me the sprinter's isin."
+    mk = event.client.build_reply_markup(mk_home)
 
     async with event.client.conversation(user.user_id) as conv:
         cancelButton = Button.inline(
             emojize(":cross_mark:") + " Cancel", b'Cancel_conv')
-        msg = await conv.send_message(message, buttons=cancelButton)
+        msg = await conv.send_message(user.user_id, message, buttons=cancelButton)
 
         response = await conv.get_response(timeout=120)
 
         # Remove the button
-        await event.client.edit_message(msg, message, buttons=None)
+        await event.client.edit_message(msg, message)
 
         # Check if isin is valid
         valid = await webscraper.isValidIsin(response.text)
@@ -403,7 +411,7 @@ async def track(event):
         else:
             message = "Invalid isin."
 
-        await conv.send_message(message, buttons=mk_home)
+        await event.client.send_message(user.user_id, message, buttons=mk)
 
 
 @events.register(events.NewMessage(pattern=r'(?i).*\b(List)\b', incoming=True))
@@ -415,21 +423,23 @@ async def current_list(event):
 
         isin_dict = await Database.read_database(user, "client_markets")
         isin_list = list(isin_dict.keys())
-        available_sprinters, unavailable_sprinters = await webscraper.getSprinterDataHTML(isin_list)
-        # Only update the data from the first four sprinters
-        await Database.update_database(user, "Markets", [available_sprinters[:list_paging], unavailable_sprinters])
 
         if isin_list:
-            results = []
+            available_sprinters, unavailable_sprinters = await webscraper.getSprinterDataHTML(isin_list)
+            # Only update the data from the first four sprinters
+            await Database.update_database(user, "Markets", [available_sprinters[:list_paging], unavailable_sprinters])
+
             if len(isin_list) > list_paging:
                 mk = Button.inline("Next", "2_List")  # Keyboard
-
+            else:
+                mk = mk_home
             coros = [generate_message(user, value)
                     for value in isin_list[:list_paging]]
             messages = await asyncio.gather(*coros)
             message = ''.join(map(str, messages))
         else:
             message = "Your list is empty."
+            mk = mk_home
 
         markup = event.client.build_reply_markup(mk)
         await event.client.send_message(user.user_id, message, buttons=markup, link_preview=False)

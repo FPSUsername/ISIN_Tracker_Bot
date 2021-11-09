@@ -129,8 +129,8 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-src/*.session
-*.session
+src/*.session*
+*.session*
 .vscode/
 credentials.json
 credentials_backup.json
