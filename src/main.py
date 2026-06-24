@@ -367,7 +367,7 @@ async def callback_settings(event):
 # Main keyboard functions
 #############################################
 # Case insensitive matching with all other patterns
-@events.register(events.NewMessage(pattern=r'(^((?i)(?!Cancel|Close|Track|List|Remove|Settings|database|db|Confirm|NL).)*$)', incoming=True))
+@events.register(events.NewMessage(pattern=r'(?i)^(?!Cancel|Close|Track|List|Remove|Settings|database|db|Confirm|NL).+', incoming=True))
 async def welcome_back(event):
     sender = await event.get_sender()
     user = utils.get_input_user(sender)
@@ -415,6 +415,7 @@ async def track(event):
 
 @events.register(events.NewMessage(pattern=r'(?i).*\b(List)\b', incoming=True))
 async def current_list(event):
+    available_sprinters = []
     sender = await event.get_sender()
     user = utils.get_input_user(sender)
     mk = None  # Initialize markup
