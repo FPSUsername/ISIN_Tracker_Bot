@@ -28,12 +28,12 @@ async def isValidIsin(isin, allow_redirects=False):
     # Checks if a sprinter is valid
     # Checks wether it's an actual ISIN. Starts with NL OR NLING and has 7 numbers
     try:
-        # https://regex101.com/r/U88u9y/1
-        isin = re.search(r"(?i)((nl)[0-9, A-Z]{10})", isin).group(0)
+        # https://regex101.com/r/xxPxLe/1
+        isin = re.search(r"(?i)((nl|de)[0-9, A-Z]{10})", isin).group(0)
     except AttributeError:
         return False
 
-    url = 'https://www.ingsprinters.nl/zoeken?q=' + isin
+    url = 'https://www.ingmarkets.nl/zoeken?q=' + isin
 
     async with aiohttp.ClientSession() as session:
         async with session.get(url, allow_redirects=allow_redirects) as response:
@@ -64,7 +64,7 @@ async def getSprinterDataHTML(isin_list):
     # Asynchronically get HTML pages
     async with aiohttp.ClientSession() as session:
         for value in isin_list:
-            url = 'https://www.ingsprinters.nl/zoeken?q=' + value
+            url = 'https://www.ingmarkets.nl/zoeken?q=' + value
             tasks.append(fetchURL(session, url, "html", allow_redirects=True))
         htmls = await asyncio.gather(*tasks)
 
