@@ -68,11 +68,11 @@ async def generate_message(user, value):
 
    # Need a more elegant solution. Perhaps with tabulate
    # Currently only from ING
-    message = "[{sprinter}](https://www.ingsprinters.nl/markten/indices/{sprinter_url})\n".format(
+    message = "[{sprinter}](https://www.ingmarkets.nl/markten/indices/{sprinter_url})\n".format(
         sprinter=data["Title"], sprinter_url=data["Title"].replace(" ", "-"))
 
     if settings["Isin"]:
-        message += "**isin**               [{Isin}](https://www.ingsprinters.nl/zoeken?q={Isin})\n".format(
+        message += "**isin**               [{Isin}](https://www.ingmarkets.nl/zoeken?q={Isin})\n".format(
             Isin=data["Isin"])
     if settings["Bid"]:
         message += "**Bid**               __{Bid}__\n".format(Bid=data["Bid"])
@@ -151,7 +151,7 @@ async def start(event):
     sender = await event.get_sender()
     name = utils.get_display_name(sender)
     user = utils.get_input_user(sender)
-    message = "Hi %s,\nI will update you on the stock exchange market with data from [ING Sprinters](https://www.ingsprinters.nl/)!\nAdd your first sprinter by tapping the 'Track' button on your keyboard." % (
+    message = "Hi %s,\nI will update you on the stock exchange market with data from [ING Sprinters](https://www.ingmarkets.nl/)!\nAdd your first sprinter by tapping the 'Track' button on your keyboard." % (
         name)
 
     await Database.new_user(user)
@@ -236,7 +236,7 @@ async def callback_confirm(event):
             for key, val in isin_dict.items():
                 if val:
                     # Currently only from ING
-                    message += "[{sprinter}](https://www.ingsprinters.nl/markten/indices/{sprinter_url})\n".format(
+                    message += "[{sprinter}](https://www.ingmarkets.nl/markten/indices/{sprinter_url})\n".format(
                             sprinter=key, sprinter_url=key.replace(" ", "-"))
                     payload = {"Isin": key}
                     await Database.delete_from_database(user, "client_markets", payload)
@@ -251,7 +251,7 @@ async def callback_remove(event):
     sender = await event.get_sender()
     user = utils.get_input_user(sender)
     callback_data = event.data.decode("utf-8")
-    regex_data = re.findall(r"(?i)([0-9]+)(_Remove)|((nl)[0-9, A-Z]{10})", callback_data)
+    regex_data = re.findall(r"(?i)([0-9]+)(_Remove)|((nl|de)[0-9, A-Z]{10})", callback_data)
     offset = int(regex_data[0][0])
     remove_paging = (list_paging * 2)
 
@@ -397,7 +397,7 @@ async def track(event):
         valid = await webscraper.isValidIsin(response.text)
         try:
             isin = re.search(
-                r"(?i)((nl)[0-9, A-Z]{10})", response.text).group(0)
+                r"(?i)((nl|de)[0-9, A-Z]{10})", response.text).group(0)
         except AttributeError:
             isin = response.text
 
