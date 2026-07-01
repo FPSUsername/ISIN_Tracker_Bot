@@ -57,6 +57,7 @@ class Database():
             CREATE TABLE IF NOT EXISTS Markets (
             Title          TEXT NOT NULL,
             Isin           TEXT UNIQUE PRIMARY KEY,
+            Market_url     TEXT,
             Type           TEXT,
             Bid            REAL,
             Ask            REAL,
@@ -112,7 +113,7 @@ class Database():
 
         await self._commit()
 
-    # EG. add sprinter
+    # EG. add product
     async def insert_to_database(self, user, table, payload):
         user_id = user.user_id
         self.logger.debug("Insert into database")
@@ -124,14 +125,15 @@ class Database():
             # Should be insert or update actually
             insert_market = (
                 """
-                INSERT INTO "{table}"(Title, Isin, Bid, Ask, Day, Lever, Stoploss, Stoploss_dist, Reference)
-                SELECT "{Title}", "{Isin}", "{Bid}", "{Ask}", "{Day}", "{Lever}", "{Stoploss}", "{Stoploss_dist}", "{Reference}"
+                INSERT INTO "{table}"(Title, Isin, Market_url, Bid, Ask, Day, Lever, Stoploss, Stoploss_dist, Reference)
+                SELECT "{Title}", "{Isin}", "{Market_url}", "{Bid}", "{Ask}", "{Day}", "{Lever}", "{Stoploss}", "{Stoploss_dist}", "{Reference}"
                 WHERE NOT EXISTS (SELECT * FROM "{table}" WHERE Isin="{Isin}")
                 """
                 .format(
                     table=table,
                     Title=payload['Title'],
                     Isin=payload['Isin'],
+                    Market_url=payload['Market'],
                     Bid=payload['Bid'],
                     Ask=payload['Ask'],
                     Day=payload['Day'],
@@ -187,7 +189,7 @@ class Database():
             # Rolling back in case of error
             await self.conn.rollback()
 
-    # EG. remove sprinter from user
+    # EG. remove product from user
     async def delete_from_database(self, user, table, payload):
         user_id = user.user_id
         self.logger.debug("Delete from database")
@@ -220,7 +222,7 @@ class Database():
     # Not completed
     async def update_database(self, user, table, payload):
         # Payload is a dictionary with the data that you want to update to the column(s).
-        # Eg. [[{sprinter1}, {sprinter2}], [{unavailable_sprinter}]]
+        # Eg. [[{product1}, {product2}], [{unavailable_product}]]
         user_id = user.user_id
         self.logger.debug("Update database")
         self.logger.debug("User ID: %d" % user_id)
@@ -233,11 +235,12 @@ class Database():
             for item in payload[0]:
                 update_markets.append(
                     """
-                    UPDATE Markets SET Title="{Title}", Bid="{Bid}", Ask="{Ask}", Day="{Day}", Lever="{Lever}", Stoploss="{Stoploss}", Stoploss_dist="{Stoploss_dist}", Reference="{Reference}", Ended="{Ended}"  WHERE Isin="{Isin}"
+                    UPDATE Markets SET Title="{Title}", Market_url="{Market_url}", Bid="{Bid}", Ask="{Ask}", Day="{Day}", Lever="{Lever}", Stoploss="{Stoploss}", Stoploss_dist="{Stoploss_dist}", Reference="{Reference}", Ended="{Ended}"  WHERE Isin="{Isin}"
                     """
                     .format(
                         Title=item['Title'],
                         Isin=item['Isin'],
+                        Market_url=item['Market'],
                         Bid=item['Bid'],
                         Ask=item['Ask'],
                         Day=item['Day'],
@@ -307,7 +310,7 @@ class Database():
             # Rolling back in case of error
             await self.conn.rollback()
 
-    # EG. get list of sprinters
+    # EG. get list of products
     async def read_database(self, user, table, payload=None):
         user_id = user.user_id
         self.logger.debug("User ID: %d" % user_id)

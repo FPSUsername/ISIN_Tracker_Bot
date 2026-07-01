@@ -18,13 +18,23 @@ import pprint as pp
 # Logger
 logger = logging.getLogger('client.main')
 
+loop = None
+
 try:
     import uvloop
-    uvloop_imported = True
+    loop = uvloop
 except ModuleNotFoundError:
-    logger.info("Running without uvloop.")  # uvloop for Linux, winuvloop for Windows
-    uvloop_imported = False
-    pass
+    if os.name == "nt":  # Windows
+        try:
+            import winuvloop
+            loop = winuvloop
+        except ModuleNotFoundError:
+            logger.info("winuvloop not available.")
+    else:
+        logger.info("uvloop not available.")
+
+if loop is None:
+    logger.info("Running without uvloop/winuvloop.")
 
 #############################################
 # Project settings
@@ -53,26 +63,24 @@ async def generate_message(user, value):
     data = await Database.read_database(user, "Markets", value)
     settings = await Database.read_database(user, "Settings")
 
-    day = "{day}".format(day=data["Day"])
+    day = "{day}%".format(day=data["Day"])
     if "-" in data["Day"]:
         day = "{} {}".format(emojize(':down_arrow:'), day)  # ⬇️
     elif float(data["Day"].replace(",", ".").replace(" %", "")) > 0.01:
         day = "{} {}".format(emojize(':up_arrow:'), day)  # ⬆️
 
-    ref = "{ref1} {ref2}".format(
-        ref1=data["Reference"], ref2=data["Reference_perc"])
-    if "-" in data["Reference_perc"]:
-        ref = "{} {}".format(emojize(':down_arrow:'), ref)  # ⬇️
-    elif "+" in data["Reference_perc"]:
-        ref = "{} {}".format(emojize(':up_arrow:'), ref)  # ⬆️
+    stoploss = "€{sl1}  {sl2}%".format(
+        sl1=data["Stoploss"], sl2=data["Stoploss_dist"])
+
+    ref = "€{ref}".format(ref=data["Reference"])
 
    # Need a more elegant solution. Perhaps with tabulate
    # Currently only from ING
-    message = "[{sprinter}](https://www.ingmarkets.nl/markten/indices/{sprinter_url})\n".format(
-        sprinter=data["Title"], sprinter_url=data["Title"].replace(" ", "-"))
+    message = "[{product}](https://www.ingmarkets.nl{market_url})\n".format(
+        product=data["Title"], market_url=data["Market_url"])
 
     if settings["Isin"]:
-        message += "**isin**               [{Isin}](https://www.ingmarkets.nl/zoeken?q={Isin})\n".format(
+        message += "**ISIN**             [{Isin}](https://www.ingmarkets.nl/producten/{Isin})\n".format(
             Isin=data["Isin"])
     if settings["Bid"]:
         message += "**Bid**               __{Bid}__\n".format(Bid=data["Bid"])
@@ -84,10 +92,9 @@ async def generate_message(user, value):
         message += "**Lever**            __{Lever}__\n".format(
             Lever=data["Lever"])
     if settings["StopLoss"]:
-        message += "**Stop loss**     __{Stoploss}__\n".format(
-            Stoploss=data["Stoploss"])
+        message += "**StopLoss**    __{Stoploss}__\n".format(Stoploss=stoploss)
     if settings["Reference"]:
-        message += "**Reference**  __{Reference}__\n\n".format(Reference=ref)
+        message += "**Reference**  __{Reference}__".format(Reference=ref)
 
     return message
 
@@ -117,7 +124,7 @@ async def main():
     # Handlers
     client.add_event_handler(start)
     client.add_event_handler(stop)
-    client.add_event_handler(welcome_back)
+    #client.add_event_handler(welcome_back) # Disabled due to annoyance
     client.add_event_handler(track)
     client.add_event_handler(current_list)
     client.add_event_handler(remove)
@@ -151,7 +158,7 @@ async def start(event):
     sender = await event.get_sender()
     name = utils.get_display_name(sender)
     user = utils.get_input_user(sender)
-    message = "Hi %s,\nI will update you on the stock exchange market with data from [ING Sprinters](https://www.ingmarkets.nl/)!\nAdd your first sprinter by tapping the 'Track' button on your keyboard." % (
+    message = "Hi %s,\nI will update you on the stock exchange market with data from [ING Markets](https://www.ingmarkets.nl/)!\nAdd your first product by tapping the 'Track' button on your keyboard." % (
         name)
 
     await Database.new_user(user)
@@ -232,12 +239,11 @@ async def callback_confirm(event):
         if regex_data[1][1] == "del":
             isin_dict = await Database.read_database(user, "client_markets")
             message += "Deleted:\n"
-
             for key, val in isin_dict.items():
                 if val:
                     # Currently only from ING
-                    message += "[{sprinter}](https://www.ingmarkets.nl/markten/indices/{sprinter_url})\n".format(
-                            sprinter=key, sprinter_url=key.replace(" ", "-"))
+                    message += "[{product}](https://www.ingmarkets.nl{product_url})\n".format(
+                            product=key, product_url=key.replace(" ", "-"))
                     payload = {"Isin": key}
                     await Database.delete_from_database(user, "client_markets", payload)
     except IndexError:
@@ -296,7 +302,7 @@ async def callback_remove(event):
 
     pages = int((len(isin_list)/remove_paging) +
                 (len(isin_list) % remove_paging > 0))
-    message = "📦 I'm ready. Tap on the sprinters that you would like to delete.\nPage %d of %d" % (
+    message = "📦 I'm ready. Tap on the products that you would like to delete.\nPage %d of %d" % (
         offset, pages)
 
     markup = event.client.build_reply_markup(mk)
@@ -380,7 +386,7 @@ async def welcome_back(event):
 async def track(event):
     sender = await event.get_sender()
     user = utils.get_input_user(sender)
-    message = "📦 I'm ready. Tell me the sprinter's isin."
+    message = "📦 I'm ready. Tell me the product's isin."
     markup = event.client.build_reply_markup(mk_home)
 
     async with event.client.conversation(user.user_id) as conv:
@@ -401,12 +407,12 @@ async def track(event):
         except AttributeError:
             isin = response.text
 
-        results, unavailable = await webscraper.getSprinterDataHTML([isin])
+        results, unavailable = await webscraper.getProductDataHTML([isin])
 
         if valid:
             await Database.insert_to_database(user, "Markets", results[0])
             await Database.insert_to_database(user, "client_markets", results[0])
-            message = "Sprinter added!"
+            message = "Product added!"
         else:
             message = "Invalid isin."
 
@@ -415,7 +421,7 @@ async def track(event):
 
 @events.register(events.NewMessage(pattern=r'(?i).*\b(List)\b', incoming=True))
 async def current_list(event):
-    available_sprinters = []
+    available_products = []
     sender = await event.get_sender()
     user = utils.get_input_user(sender)
     mk = None  # Initialize markup
@@ -425,9 +431,9 @@ async def current_list(event):
         isin_list = list(isin_dict.keys())
 
         if isin_list:
-            available_sprinters, unavailable_sprinters = await webscraper.getSprinterDataHTML(isin_list)
-            # Only update the data from the first four sprinters
-            await Database.update_database(user, "Markets", [available_sprinters[:list_paging], unavailable_sprinters])
+            available_products, unavailable_products = await webscraper.getProductDataHTML(isin_list)
+            # Only update the data from the first four products
+            await Database.update_database(user, "Markets", [available_products[:list_paging], unavailable_products])
 
             if len(isin_list) > list_paging:
                 mk = Button.inline("Next", "2_List")  # Keyboard
@@ -443,8 +449,8 @@ async def current_list(event):
 
         markup = event.client.build_reply_markup(mk)
         await event.client.send_message(user.user_id, message, buttons=markup, link_preview=False)
-    # Update the rest of the sprinters
-    await Database.update_database(user, "Markets", [available_sprinters[list_paging:]])
+    # Update the rest of the products
+    await Database.update_database(user, "Markets", [available_products[list_paging:]])
 
 
 @events.register(events.NewMessage(pattern=r'(?i).*\b(Remove)\b', incoming=True))
@@ -482,7 +488,7 @@ async def remove(event):
 
     pages = int((len(isin_list)/remove_paging) +
                 (len(isin_list) % remove_paging > 0))
-    message = "📦 I'm ready. Tap on the sprinters that you would like to delete.\nPage 1 of %d" % pages
+    message = "📦 I'm ready. Tap on the products that you would like to delete.\nPage 1 of %d" % pages
     markup = event.client.build_reply_markup(mk)
     await event.client.send_message(user.user_id, message, buttons=markup)
 
@@ -519,9 +525,8 @@ async def database(event):
 
 if __name__ == '__main__':
     Database = db.Database(project_dir)
-
-    if uvloop_imported:
-        uvloop.install()
+    if loop is not None:
+        loop.install()
 
     try:
         asyncio.run(main())

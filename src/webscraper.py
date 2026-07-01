@@ -17,7 +17,7 @@ def chunks(l, n):
         yield l[i:i + n]
 
 
-def parseSprinterData(data):
+def parseProductData(data):
     # Parse JSON list of data in pages
     data_paged = list(chunks(data, 2))
 
@@ -25,7 +25,7 @@ def parseSprinterData(data):
 
 
 async def isValidIsin(isin, allow_redirects=False):
-    # Checks if a sprinter is valid
+    # Checks if a product is valid
     # Checks wether it's an actual ISIN. Starts with DE, NL OR NLING and has 7 numbers
     try:
         # https://regex101.com/r/xxPxLe/1
@@ -55,7 +55,7 @@ async def fetchURL(session, url, requested_format, allow_redirects=False):
         return None
 
 
-async def getSprinterDataHTML(isin_list):
+async def getProductDataHTML(isin_list):
     tasks = []
     results = []
     results_unavailable = []
@@ -76,7 +76,7 @@ async def getSprinterDataHTML(isin_list):
             # Find name
             for h1_tag in soup.find_all('h1', attrs={'data-astro-cid-nnd2jpgu': True}):
                 name.append(h1_tag.text.strip())
-            sprinter_name = name[-1]
+            product_name = name[-1]
             # Unknown if this still works
             if "Beëindigd" in name:
                 temp_unavailable["Isin"] = isin_list[index]
@@ -92,16 +92,24 @@ async def getSprinterDataHTML(isin_list):
         dt = soup.find('dt', string=lambda txt: txt and 'Onderliggende' in txt)
         if dt:
             dd = dt.find_next_sibling('dd')
-            sprinter_name = dd.get_text(strip=True) if dd else None
+            product_name = dd.get_text(strip=True) if dd else None
+
+        dt = soup.find('dt', string=lambda txt: txt and 'Onderliggende' in txt)
+        if dt:
+            dd = dt.find_next_sibling('dd')
+            a = dd.find('a') if dd else None
+            market_url = a['href'] if a and a.has_attr('href') else None
+
 
         dt = soup.find('dt', string=lambda txt: txt and 'Positie' in txt)
         if dt:
             dd = dt.find_next_sibling('dd')
-            sprinter_type = dd.get_text(strip=True) if dd else None
+            product_type = dd.get_text(strip=True) if dd else None
 
         perf_data = extract_performance_block(soup)
         temp_dict = {}
-        temp_dict["Title"] = sprinter_name
+        temp_dict["Title"] = product_name
+        temp_dict["Market"] = market_url
         temp_dict["Isin"] = isin_list[index]
         temp_dict["Bid"] = perf_data.get("Bid")
         temp_dict["Ask"] = perf_data.get("Ask")
@@ -110,7 +118,7 @@ async def getSprinterDataHTML(isin_list):
         temp_dict["Stoploss"] = perf_data.get("Stoploss")
         temp_dict["Stoploss_dist"] = perf_data.get("Stoploss_distance")
         temp_dict["Reference"] = perf_data.get("Reference")
-        temp_dict["Type"] = sprinter_type
+        temp_dict["Type"] = product_type
         temp_dict["Ended"] = 0
 
         results.append(temp_dict)
