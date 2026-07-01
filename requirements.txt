@@ -8,3 +8,5 @@ telethon>=1.23.0
 lxml>=4.6.4
 tabulate>=0.8.9
 uvloop>=0.16.0; sys_platform == "linux"
+winuvloop>=0.2.4; sys_platform == "win32"
+pip-system-certs>=5.3

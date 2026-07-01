@@ -26,24 +26,23 @@ def parseSprinterData(data):
 
 async def isValidIsin(isin, allow_redirects=False):
     # Checks if a sprinter is valid
-    # Checks wether it's an actual ISIN. Starts with NL OR NLING and has 7 numbers
+    # Checks wether it's an actual ISIN. Starts with DE, NL OR NLING and has 7 numbers
     try:
         # https://regex101.com/r/xxPxLe/1
         isin = re.search(r"(?i)((nl|de)[0-9, A-Z]{10})", isin).group(0)
     except AttributeError:
         return False
 
-    url = 'https://www.ingmarkets.nl/zoeken?q=' + isin
+    url = 'https://www.ingmarkets.nl/producten/' + isin
 
     async with aiohttp.ClientSession() as session:
         async with session.get(url, allow_redirects=allow_redirects) as response:
             status = response.status
 
-    if status == 302:  # Redirect url found
+    if status != 404:  # 200 or 302
         return True
 
     return False
-
 
 
 async def fetchURL(session, url, requested_format, allow_redirects=False):
@@ -64,7 +63,7 @@ async def getSprinterDataHTML(isin_list):
     # Asynchronically get HTML pages
     async with aiohttp.ClientSession() as session:
         for value in isin_list:
-            url = 'https://www.ingmarkets.nl/zoeken?q=' + value
+            url = 'https://www.ingmarkets.nl/producten/' + value
             tasks.append(fetchURL(session, url, "html", allow_redirects=True))
         htmls = await asyncio.gather(*tasks)
 
@@ -74,10 +73,11 @@ async def getSprinterDataHTML(isin_list):
         soup = BeautifulSoup(value, 'lxml')
         try:
             name = []
-            for span_tag in soup.find_all('span', itemprop='name'):
-                name.append(span_tag.text.strip())
+            # Find name
+            for h1_tag in soup.find_all('h1', attrs={'data-astro-cid-nnd2jpgu': True}):
+                name.append(h1_tag.text.strip())
             sprinter_name = name[-1]
-
+            # Unknown if this still works
             if "Beëindigd" in name:
                 temp_unavailable["Isin"] = isin_list[index]
                 temp_unavailable["Ended"] = 1
@@ -89,41 +89,81 @@ async def getSprinterDataHTML(isin_list):
             results_unavailable.append(temp_unavailable)
             return
 
-        # Scraping data Not in the correct format yet
-        chart = []
-        for h3_tag in soup.find_all('h3', class_='meta__heading no-margin'):
-            chart.append(h3_tag.text.strip())
+        dt = soup.find('dt', string=lambda txt: txt and 'Onderliggende' in txt)
+        if dt:
+            dd = dt.find_next_sibling('dd')
+            sprinter_name = dd.get_text(strip=True) if dd else None
 
-        data = []
-        for span_tag in soup.find_all('span', class_=re.compile('^meta__value meta__value--l*')):
-            data.append(span_tag.text.strip())
+        dt = soup.find('dt', string=lambda txt: txt and 'Positie' in txt)
+        if dt:
+            dd = dt.find_next_sibling('dd')
+            sprinter_type = dd.get_text(strip=True) if dd else None
 
-        # https://regex101.com/r/DygTpD/1
-        sprinter_type = soup.find('h1', class_="text-body").text.strip()
-        sprinter_type = re.search(r"(\S+)\s\S*[0-9]", sprinter_type).group(1)
-
+        perf_data = extract_performance_block(soup)
         temp_dict = {}
         temp_dict["Title"] = sprinter_name
         temp_dict["Isin"] = isin_list[index]
+        temp_dict["Bid"] = perf_data.get("Bid")
+        temp_dict["Ask"] = perf_data.get("Ask")
+        temp_dict["Day"] = perf_data.get("Day")
+        temp_dict["Lever"] = perf_data.get("Lever")
+        temp_dict["Stoploss"] = perf_data.get("Stoploss")
+        temp_dict["Stoploss_dist"] = perf_data.get("Stoploss_distance")
+        temp_dict["Reference"] = perf_data.get("Reference")
         temp_dict["Type"] = sprinter_type
         temp_dict["Ended"] = 0
 
-        for x in range(len(chart)):
-            if x == 2:
-                temp_dict[chart[x]] = data[x].replace(" %", "")
-            if x == 5:
-                # Either create a string as '50,12 -0,4'
-                temp_dict[chart[x].replace("*", "")] = [data[x], data[6]]
-                # Or create two entries in dict (better)
-                temp_dict[chart[x].replace("*", "") + "_1"] = data[x]
-                temp_dict[chart[x].replace("*", "") + "_2"] = data[6]
-            else:
-                temp_dict[chart[x]] = data[x]
-
         results.append(temp_dict)
-        return
 
     coros = [iterations(index, value) for index, value in enumerate(htmls)]
     await asyncio.gather(*coros)
 
     return results, results_unavailable
+
+def extract_performance_block(soup):
+    perf = soup.find("iwp-product-performance")
+    if not perf:
+        logger.debug("[extract_performance_block] No <iwp-product-performance> found")
+        return {}
+
+    def get_attr(name):
+        value = perf.get(name)
+        logger.debug(f"[extract_performance_block] {name} = {value}")
+        return value
+
+    # Raw values
+    raw_day = get_attr("performance")
+    raw_dist = get_attr("distancetostoploss")
+    raw_bid = get_attr("bid")
+    raw_ask = get_attr("ask")
+    raw_lever = get_attr("leverage")
+    raw_stoploss = get_attr("stoplosslevel")
+    raw_reference = get_attr("underlyingbid")
+
+    # Convert fractional → percentage and format with 2 decimals
+    def fmt_percent(raw):
+        if raw is None:
+            return None
+        try:
+            return f"{float(raw) * 100:.2f}"
+        except ValueError:
+            return None
+
+    # Format plain numeric values with 2 decimals
+    def fmt_number(raw):
+        if raw is None:
+            return None
+        try:
+            return f"{float(raw):.2f}"
+        except ValueError:
+            return None
+
+    return {
+        "Bid": fmt_number(raw_bid),
+        "Ask": fmt_number(raw_ask),
+        "Day": fmt_percent(raw_day),                     # % 1 Dag
+        "Lever": fmt_number(raw_lever),                  # Hefboom
+        "Stoploss": fmt_number(raw_stoploss),            # Stop-loss niveau
+        "Stoploss_distance": fmt_percent(raw_dist),      # Afstand tot stop loss-niveau
+        "Reference": fmt_number(raw_reference),          # Referentiekoers*
+    }

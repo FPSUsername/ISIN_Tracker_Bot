@@ -22,7 +22,7 @@ try:
     import uvloop
     uvloop_imported = True
 except ModuleNotFoundError:
-    logger.info("Running without uvloop.")  # uvloop currently only works on Linux, see issue 14 on the GitHub page of uvloop.
+    logger.info("Running without uvloop.")  # uvloop for Linux, winuvloop for Windows
     uvloop_imported = False
     pass
 

@@ -1,6 +1,6 @@
 # ISIN Tracker Bot
 
-![ING](https://www.ingsprinters.nl/v23850/assets/img/logos/ing.svg) &emsp; ![BNP Paribas](https://www.bnpparibasmarkets.nl/img/brand/bnp-paribas.svg)
+![ING](https://www.ingmarkets.nl/images/logos/ing.svg) &emsp; ![BNP Paribas](https://www.bnpparibasmarkets.nl/img/brand/bnp-paribas.svg)
 
 Retrieve stock exchange information right at your fingertips
 

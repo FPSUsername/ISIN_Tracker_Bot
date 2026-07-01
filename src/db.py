@@ -41,6 +41,7 @@ class Database():
             (
                 user_id        INTEGER UNIQUE PRIMARY KEY,
                 Isin           BOOLEAN NOT NULL CHECK (Isin      IN (0,1)) DEFAULT 1,
+                Type           BOOLEAN NOT NULL CHECK (Type      IN (0,1)) DEFAULT 1,
                 Bid            BOOLEAN NOT NULL CHECK (Bid       IN (0,1)) DEFAULT 1,
                 Ask            BOOLEAN NOT NULL CHECK (Ask       IN (0,1)) DEFAULT 1,
                 Day            BOOLEAN NOT NULL CHECK (Day       IN (0,1)) DEFAULT 1,
@@ -56,13 +57,14 @@ class Database():
             CREATE TABLE IF NOT EXISTS Markets (
             Title          TEXT NOT NULL,
             Isin           TEXT UNIQUE PRIMARY KEY,
+            Type           TEXT,
             Bid            REAL,
             Ask            REAL,
             Day            TEXT,
             Lever          REAL,
             Stoploss       TEXT,
+            Stoploss_dist  TEXT,
             Reference      TEXT,
-            Reference_perc TEXT,
             Ended          BOOLEAN NOT NULL CHECK (Ended IN (0,1)) DEFAULT 0
             );
             """
@@ -122,21 +124,21 @@ class Database():
             # Should be insert or update actually
             insert_market = (
                 """
-                INSERT INTO "{table}"(Title, Isin, Bid, Ask, Day, Lever, Stoploss, Reference, Reference_perc)
-                SELECT "{Title}", "{Isin}", "{Bid}", "{Ask}", "{Day}", "{Lever}", "{Stoploss}", "{Reference}", "{Reference_perc}"
+                INSERT INTO "{table}"(Title, Isin, Bid, Ask, Day, Lever, Stoploss, Stoploss_dist, Reference)
+                SELECT "{Title}", "{Isin}", "{Bid}", "{Ask}", "{Day}", "{Lever}", "{Stoploss}", "{Stoploss_dist}", "{Reference}"
                 WHERE NOT EXISTS (SELECT * FROM "{table}" WHERE Isin="{Isin}")
                 """
                 .format(
                     table=table,
                     Title=payload['Title'],
                     Isin=payload['Isin'],
-                    Bid=payload['Bied'],
-                    Ask=payload['Laat'],
-                    Day=payload['% 1 dag'],
-                    Lever=payload['Hefboom'],
-                    Stoploss=payload['Stop loss-niveau'],
-                    Reference=payload['Referentiekoers_1'],
-                    Reference_perc=payload['Referentiekoers_2'])
+                    Bid=payload['Bid'],
+                    Ask=payload['Ask'],
+                    Day=payload['Day'],
+                    Lever=payload['Lever'],
+                    Stoploss=payload['Stoploss'],
+                    Stoploss_dist=payload['Stoploss_dist'],
+                    Reference=payload['Reference'])
             )
 
         if table == "client_markets":
@@ -231,18 +233,18 @@ class Database():
             for item in payload[0]:
                 update_markets.append(
                     """
-                    UPDATE Markets SET Title="{Title}", Bid="{Bid}", Ask="{Ask}", Day="{Day}", Lever="{Lever}", Stoploss="{Stoploss}", Reference="{Reference}", Reference_perc="{Reference_perc}", Ended="{Ended}"  WHERE Isin="{Isin}"
+                    UPDATE Markets SET Title="{Title}", Bid="{Bid}", Ask="{Ask}", Day="{Day}", Lever="{Lever}", Stoploss="{Stoploss}", Stoploss_dist="{Stoploss_dist}", Reference="{Reference}", Ended="{Ended}"  WHERE Isin="{Isin}"
                     """
                     .format(
                         Title=item['Title'],
                         Isin=item['Isin'],
-                        Bid=item['Bied'],
-                        Ask=item['Laat'],
-                        Day=item['% 1 dag'],
-                        Lever=item['Hefboom'],
-                        Stoploss=item['Stop loss-niveau'],
-                        Reference=item['Referentiekoers_1'],
-                        Reference_perc=item['Referentiekoers_2'],
+                        Bid=item['Bid'],
+                        Ask=item['Ask'],
+                        Day=item['Day'],
+                        Lever=item['Lever'],
+                        Stoploss=item['Stoploss'],
+                        Stoploss_dist=item['Stoploss_dist'],
+                        Reference=item['Reference'],
                         Ended=item['Ended'])
                 )
             if len(payload) > 1:
