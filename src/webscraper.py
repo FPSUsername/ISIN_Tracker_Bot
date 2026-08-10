@@ -90,7 +90,7 @@ async def getProductDataHTML(isin_list):
             tasks.append(fetchURL(session, url, "html", allow_redirects=True))
 
         htmls = await asyncio.gather(*tasks)
-    
+
     # Asynchronically scrape data
     async def iterations(index, value):
         temp_unavailable = {}
@@ -100,7 +100,6 @@ async def getProductDataHTML(isin_list):
             # Find name
             for h1_tag in soup.find_all('h1'):
                 name.append(h1_tag.get_text(strip=True))
-                print(name)
             product_name = name[-1]
             # Unknown if this still works
             if "Beëindigd" in name:
