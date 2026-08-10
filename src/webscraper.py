@@ -47,6 +47,11 @@ async def isValidIsin(isin, allow_redirects=False):
 
 async def fetchURL(session, url, requested_format, allow_redirects=False):
     # Fetch URL asynchronous
+    if "ingmarkets.nl" in url:
+        session.cookie_jar.update_cookies({
+            "disclaimer": "true"
+        })
+    
     async with session.get(url, allow_redirects=allow_redirects) as response:
         if response.status == 200 or response.status == 302:
             if requested_format == "json":
