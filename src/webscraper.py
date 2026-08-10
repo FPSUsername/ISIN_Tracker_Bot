@@ -3,6 +3,7 @@ import logging
 import aiohttp
 import asyncio
 # import reprlib
+from aiohttp.helpers import URL
 from operator import itemgetter
 from bs4 import BeautifulSoup
 import re
@@ -46,19 +47,28 @@ async def isValidIsin(isin, allow_redirects=False):
 
 
 async def fetchURL(session, url, requested_format, allow_redirects=False):
-    # Fetch URL asynchronous
-    if "ingmarkets.nl" in url:
-        session.cookie_jar.update_cookies({
-            "disclaimer": "true"
-        })
-    
-    async with session.get(url, allow_redirects=allow_redirects) as response:
-        if response.status == 200 or response.status == 302:
-            if requested_format == "json":
-                return await response.json()
-            return await response.text()
-        return None
 
+    # --- ING Markets disclaimer bypass (real fix) ---
+    if "ingmarkets.nl/producten" in url:
+        await session.post(
+            "https://www.ingmarkets.nl/disclaimer",
+            data={"redirect": url}
+        )
+
+    try:
+        async with session.get(url, allow_redirects=True) as response:
+            if requested_format in ("text", "html"):
+                return await response.text()
+            elif requested_format == "json":
+                return await response.json()
+            elif requested_format == "bytes":
+                return await response.read()
+            else:
+                raise ValueError(f"Unknown requested_format: {requested_format}")
+
+    except Exception as e:
+        print(f"Error fetching URL {url}: {e}")
+        return None
 
 async def getProductDataHTML(isin_list):
     tasks = []
@@ -67,11 +77,20 @@ async def getProductDataHTML(isin_list):
 
     # Asynchronically get HTML pages
     async with aiohttp.ClientSession() as session:
-        for value in isin_list:
-            url = 'https://www.ingmarkets.nl/producten/' + value
-            tasks.append(fetchURL(session, url, "html", allow_redirects=True))
-        htmls = await asyncio.gather(*tasks)
 
+        # --- ING Markets disclaimer bypass (correct placement) ---
+        session.cookie_jar.update_cookies(
+            {"disclaimer": "true"},
+            response_url=URL("https://www.ingmarkets.nl/")
+        )
+
+        # --- Schedule parallel fetches ---
+        for value in isin_list:
+            url = f"https://www.ingmarkets.nl/producten/{value}"
+            tasks.append(fetchURL(session, url, "html", allow_redirects=True))
+
+        htmls = await asyncio.gather(*tasks)
+    
     # Asynchronically scrape data
     async def iterations(index, value):
         temp_unavailable = {}
@@ -79,8 +98,9 @@ async def getProductDataHTML(isin_list):
         try:
             name = []
             # Find name
-            for h1_tag in soup.find_all('h1', attrs={'data-astro-cid-nnd2jpgu': True}):
-                name.append(h1_tag.text.strip())
+            for h1_tag in soup.find_all('h1'):
+                name.append(h1_tag.get_text(strip=True))
+                print(name)
             product_name = name[-1]
             # Unknown if this still works
             if "Beëindigd" in name:
