@@ -131,7 +131,6 @@ async def getProductDataHTML(isin_list):
             product_type = dd.get_text(strip=True) if dd else None
 
         perf_data = extract_performance_block(soup)
-        print(perf_data)
         temp_dict = {}
         temp_dict["Title"] = product_name
         temp_dict["Market"] = market_url
@@ -145,7 +144,6 @@ async def getProductDataHTML(isin_list):
         temp_dict["Reference"] = perf_data.get("Reference")
         temp_dict["Type"] = product_type
         temp_dict["Ended"] = 0
-        print(temp_dict)
 
         results.append(temp_dict)
 
