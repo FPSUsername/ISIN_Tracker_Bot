@@ -131,6 +131,7 @@ async def getProductDataHTML(isin_list):
             product_type = dd.get_text(strip=True) if dd else None
 
         perf_data = extract_performance_block(soup)
+        print(perf_data)
         temp_dict = {}
         temp_dict["Title"] = product_name
         temp_dict["Market"] = market_url
@@ -144,6 +145,7 @@ async def getProductDataHTML(isin_list):
         temp_dict["Reference"] = perf_data.get("Reference")
         temp_dict["Type"] = product_type
         temp_dict["Ended"] = 0
+        print(temp_dict)
 
         results.append(temp_dict)
 
@@ -153,31 +155,50 @@ async def getProductDataHTML(isin_list):
     return results, results_unavailable
 
 def extract_performance_block(soup):
-    perf = soup.find("iwp-product-performance")
+    perf = soup.find("div", {"aria-label": "Performance"})
     if not perf:
-        logger.debug("[extract_performance_block] No <iwp-product-performance> found")
+        logger.debug("[extract_performance_block] No <aria-label Performance> found")
         return {}
 
-    def get_attr(name):
-        value = perf.get(name)
-        logger.debug(f"[extract_performance_block] {name} = {value}")
-        return value
+    def get_dt_dd(perf, label):
+        # Find <dt> that starts with the label, ignoring nested spans
+        for dt in perf.find_all("dt"):
+            # Extract only the text nodes, ignoring spans
+            dt_text = "".join(dt.find_all(string=True, recursive=False)).strip()
+            if label in dt_text:
+                dd = dt.find_next("dd")
+                if not dd:
+                    return None
+
+                val = dd.find("span", class_="value")
+                if not val:
+                    val = dd.find("span", class_=lambda c: c and "value" in c)
+
+                return val.text.strip() if val else None
+
+        return None
 
     # Raw values
-    raw_day = get_attr("performance")
-    raw_dist = get_attr("distancetostoploss")
-    raw_bid = get_attr("bid")
-    raw_ask = get_attr("ask")
-    raw_lever = get_attr("leverage")
-    raw_stoploss = get_attr("stoplosslevel")
-    raw_reference = get_attr("underlyingbid")
+    raw_day = get_dt_dd(perf, "% 1 Dag")
+    raw_bid = get_dt_dd(perf, "Bied")
+    raw_ask = get_dt_dd(perf, "Laat")
+    raw_lever = get_dt_dd(perf, "Hefboom")
+    raw_stoploss = get_dt_dd(perf, "Stop-loss niveau")
+    raw_dist = get_dt_dd(perf, "Afstand tot stop loss-niveau")
+    raw_reference = get_dt_dd(perf, "Referentiekoers")
+
 
     # Convert fractional → percentage and format with 2 decimals
     def fmt_percent(raw):
         if raw is None:
             return None
+        cleaned = (
+            str(raw)
+            .replace(",", ".")
+            .replace("%", "")
+        )
         try:
-            return f"{float(raw) * 100:.2f}"
+            return f"{float(cleaned):.2f}"
         except ValueError:
             return None
 
@@ -185,8 +206,17 @@ def extract_performance_block(soup):
     def fmt_number(raw):
         if raw is None:
             return None
+        s = str(raw)
+        # Normalize formatting
+        s = s.replace("\xa0", "")      # remove NBSP
+        s = s.replace("€", "")         # remove euro symbol
+        s = s.replace(" ", "")         # remove normal spaces
+        s = re.sub(r"\.(?=\d{3}(,|$))", "", s) # Remove thousands separators (dots before commas)
+        s = s.replace(",", ".") # Convert decimal comma → dot
+        s = re.sub(r"[^0-9.\-]", "", s) # Strip everything except digits, dot, minus
+
         try:
-            return f"{float(raw):.2f}"
+            return f"{float(s):.2f}"
         except ValueError:
             return None
 
